@@ -7,6 +7,7 @@
 #include <Fonts/FreeMono12pt7b.h>
 
 #include "WiFiModule.h"
+#include "OpenWeatherClient.h"
 
 #define CS_PIN SS
 #define DC_PIN 17
@@ -19,13 +20,8 @@ GxEPD_Class display(io, RST_PIN, BUSY_PIN);
 
 WiFiModule wifi;
 
-void drawHelloWorld()
-{
-    display.setCursor(0, 20);
-    display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMono12pt7b);
-    display.print("Hello, World!");
-}
+const char weatherApiKey[] = OPEN_WEATHER_MAP_API_KEY;
+OpenWeatherClient weather(CITY_ID, weatherApiKey);
 
 void setup() {
     Serial.begin(115200);
@@ -36,28 +32,38 @@ void setup() {
     display.setRotation(1);
     display.setFont(&FreeMono12pt7b);
     display.setTextColor(GxEPD_BLACK);
-    display.setCursor(0, 20);
-    display.printf("Hello, world!");
-    // display.drawPaged(drawHelloWorld);
     display.update();
-    display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 
     pinMode(LED_PIN, OUTPUT);
 }
 
 bool on = false;
 bool connected = false;
+bool hasTemp = false;
 
 unsigned long nextDisplayUpdate = 0;
+
+void printTemp() {
+    digitalWrite(LED_PIN, HIGH);
+
+    auto temp = weather.getCurrentTemp();
+   
+    display.setCursor(0, 40);
+    display.printf("%.1f°C", temp);
+
+    digitalWrite(LED_PIN, LOW);
+}
 
 void updateDisplay(const unsigned long t) {
     if (t < nextDisplayUpdate) return;
 
-    display.fillRect(0, 50, 50, 50, GxEPD_WHITE);
+    if (connected && !hasTemp) {
+        printTemp();
+        hasTemp = true;
+    }
 
-    display.setCursor(2, 80);
     if (wifi.isConnected() && !connected) {
-        display.setCursor(2, 40);
+        display.setCursor(0, 16);
         display.print(WiFi.localIP().toString());
         connected = true;
     }
