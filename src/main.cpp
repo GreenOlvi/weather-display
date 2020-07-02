@@ -44,23 +44,20 @@ bool hasTemp = false;
 unsigned long nextDisplayUpdate = 0;
 
 void printTemp() {
-    digitalWrite(LED_PIN, HIGH);
-
-    auto temp = weather.getCurrentTemp();
+    float temp = weather.getCurrentTemp();
+    String desc = weather.getCurrentDescription();
    
     display.setCursor(0, 40);
     display.printf("%.1f°C", temp);
 
-    digitalWrite(LED_PIN, LOW);
+    display.setCursor(0, 60);
+    display.println(desc);
 }
 
 void updateDisplay(const unsigned long t) {
     if (t < nextDisplayUpdate) return;
 
-    if (connected && !hasTemp) {
-        printTemp();
-        hasTemp = true;
-    }
+    printTemp();
 
     if (wifi.isConnected() && !connected) {
         display.setCursor(0, 16);
@@ -77,5 +74,6 @@ void loop() {
     unsigned long t = millis();
 
     wifi.update(t);
+    weather.update(t);
     updateDisplay(t);
 }
