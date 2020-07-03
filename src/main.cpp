@@ -23,8 +23,24 @@ WiFiModule wifi;
 const char weatherApiKey[] = OPEN_WEATHER_MAP_API_KEY;
 OpenWeatherClient weather(CITY_ID, weatherApiKey);
 
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  600       /* Time ESP32 will go to sleep (in seconds) */
+RTC_DATA_ATTR int bootCount = 0;
+
+void goToSleep() {
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) + " Seconds");
+  Serial.println("Going to sleep now");
+  Serial.flush();
+  esp_deep_sleep_start();
+}
+
 void setup() {
     Serial.begin(115200);
+
+    ++bootCount;
+    Serial.println("Boot number: " + String(bootCount));
+
     wifi.setup();
 
     display.init();
@@ -42,6 +58,7 @@ bool connected = false;
 bool hasTemp = false;
 
 unsigned long nextDisplayUpdate = 0;
+unsigned long gotoSleepAt = -1;
 
 void printTemp() {
     float temp = weather.getCurrentTemp();
@@ -63,7 +80,12 @@ void updateDisplay(const unsigned long t) {
         display.setCursor(0, 16);
         display.print(WiFi.localIP().toString());
         connected = true;
+
+        gotoSleepAt = t + 5000;
     }
+
+    display.setCursor(0, 120);
+    display.printf("Boot count %d", bootCount);
 
     display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 
@@ -76,4 +98,8 @@ void loop() {
     wifi.update(t);
     weather.update(t);
     updateDisplay(t);
+
+    if (t <= gotoSleepAt) {
+        goToSleep();
+    }
 }
