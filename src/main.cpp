@@ -18,7 +18,9 @@
 GxIO_Class io(SPI, CS_PIN, DC_PIN, RST_PIN);
 GxEPD_Class display(io, RST_PIN, BUSY_PIN);
 
-WiFiModule wifi;
+const char wifiSsid[] = STASSID;
+const char wifiPassword[] = STAPSK;
+WiFiModule wifi(wifiSsid, wifiPassword);
 
 const char weatherApiKey[] = OPEN_WEATHER_MAP_API_KEY;
 OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);

@@ -1,13 +1,13 @@
 #include "WiFiModule.h"
 #include "secrets.h"
 
-void WiFiModule::setup() {
-    char* ssid = STASSID;
-    char* password = STAPSK;
+WiFiModule::WiFiModule(const char* ssid, const char* password) : _ssid(ssid), _password(password) {
+}
 
+void WiFiModule::setup() {
     WiFi.setHostname(HOSTNAME);
     WiFi.mode(WIFI_STA);
-    WiFi.begin(STASSID, STAPSK);
+    WiFi.begin(_ssid, _password);
 }
 
 bool WiFiModule::isConnected() {
