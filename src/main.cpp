@@ -4,7 +4,7 @@
 #include <GxGDEH0213B72/GxGDEH0213B72.h>
 #include <GxIO/GxIO_SPI/GxIO_SPI.h>
 #include <GxIO/GxIO.h>
-#include <Fonts/FreeMono12pt7b.h>
+#include <Fonts/FreeMono9pt7b.h>
 
 #include "WiFiModule.h"
 #include "OpenWeatherClient.h"
@@ -21,24 +21,21 @@ GxEPD_Class display(io, RST_PIN, BUSY_PIN);
 WiFiModule wifi;
 
 const char weatherApiKey[] = OPEN_WEATHER_MAP_API_KEY;
-OpenWeatherClient weather(CITY_ID, weatherApiKey);
+OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  600       /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  600      /* Time ESP32 will go to sleep (in seconds) */
 RTC_DATA_ATTR int bootCount = 0;
 
 void goToSleep() {
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-  Serial.println("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) + " Seconds");
-  Serial.println("Going to sleep now");
-  Serial.flush();
   esp_deep_sleep_start();
 }
 
 void setup() {
-    Serial.begin(115200);
-
     ++bootCount;
+
+    Serial.begin(115200);
     Serial.println("Boot number: " + String(bootCount));
 
     wifi.setup();
@@ -46,9 +43,10 @@ void setup() {
     display.init();
     display.eraseDisplay();
     display.setRotation(1);
-    display.setFont(&FreeMono12pt7b);
+    display.setFont(&FreeMono9pt7b);
     display.setTextColor(GxEPD_BLACK);
-    display.update();
+    // display.update();
+    // display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 
     pinMode(LED_PIN, OUTPUT);
 }
@@ -61,14 +59,13 @@ unsigned long nextDisplayUpdate = 0;
 unsigned long gotoSleepAt = -1;
 
 void printTemp() {
-    float temp = weather.getCurrentTemp();
-    String desc = weather.getCurrentDescription();
-   
-    display.setCursor(0, 40);
-    display.printf("%.1f°C", temp);
+    display.setCursor(0, 24);
+    display.printf("%.1f°C  ", weather.getCurrentTemp());
+    display.println(weather.getCurrentDescription());
 
-    display.setCursor(0, 60);
-    display.println(desc);
+    display.setCursor(0, 40);
+    display.printf("%.1f°C  ", weather.getTomorrowTemp());
+    display.println(weather.getTomorrowDescription());
 }
 
 void updateDisplay(const unsigned long t) {
@@ -77,7 +74,7 @@ void updateDisplay(const unsigned long t) {
     printTemp();
 
     if (wifi.isConnected() && !connected) {
-        display.setCursor(0, 16);
+        display.setCursor(0, 10);
         display.print(WiFi.localIP().toString());
         connected = true;
 

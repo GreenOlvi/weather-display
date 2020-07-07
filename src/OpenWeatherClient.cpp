@@ -1,24 +1,26 @@
 #include "OpenWeatherClient.h"
 #include "secrets.h"
 
-OpenWeatherClient::OpenWeatherClient(int cityId, const char* apiKey) : _cityId(cityId), _apiKey(apiKey) {
+OpenWeatherClient::OpenWeatherClient(float latitude, float longitude, const char* apiKey)
+    : _latitude(latitude), _longitude(longitude), _apiKey(apiKey) {
 }
 
 void OpenWeatherClient::update(const unsigned long t) {
-    if (_current.updated == 0) {
-        fetchCurrentWeather();
+    if (_weather.updated == 0) {
+        fetchWeather();
     }
 }
 
-String OpenWeatherClient::getCurrentUri() {
-    String uri = String(_currentWeatherUri);
-    uri.replace("{cityId}", String(_cityId));
+String OpenWeatherClient::buildUri() {
+    String uri = String(_weatherUri);
     uri.replace("{apiKey}", _apiKey);
+    uri.replace("{lat}", String(_latitude, 2));
+    uri.replace("{lon}", String(_longitude, 2));
     return uri;
 }
 
-void OpenWeatherClient::fetchCurrentWeather() {
-    String url = getCurrentUri();
+void OpenWeatherClient::fetchWeather() {
+    String url = buildUri();
 
     HTTPClient client;
     client.begin(url);
@@ -37,26 +39,47 @@ void OpenWeatherClient::fetchCurrentWeather() {
     payload.toCharArray(json, sizeof(json));
     json[payload.length() + 1] = '\0';
 
-    StaticJsonDocument<1024> doc;
+    DynamicJsonDocument doc(30000);
     DeserializationError error = deserializeJson(doc, json);
 
     if (error) {
         Serial.print(F("deserializeJson() failed: "));
         Serial.println(error.c_str());
+        Serial.println(doc.capacity());
         return;
     }
 
-    _current.updated = millis();
-    _current.temp = doc["main"]["temp"].as<float>();
-    _current.feels_like = doc["main"]["feels_like"].as<float>();
-    _current.type = doc["weather"][0]["main"].as<String>();
-    _current.description = doc["weather"][0]["description"].as<String>();
+    _weather.updated = millis();
+    _weather.timezone = doc["timezone"].as<String>();
+    _weather.timezone_offset = doc["timezone_offset"].as<EPOCH>();
+
+    _weather.current.temp = doc["current"]["temp"].as<float>();
+    _weather.current.feels_like = doc["current"]["feels_like"].as<float>();
+    _weather.current.icon = doc["current"]["weather"][0]["main"].as<String>();
+    _weather.current.description = doc["current"]["weather"][0]["description"].as<String>();
+    _weather.current.sunrise = doc["current"]["weather"][0]["sunrise"].as<EPOCH>();
+    _weather.current.sunset = doc["current"]["weather"][0]["sunset"].as<EPOCH>();
+
+    _weather.tomorrow.temp = doc["daily"][1]["temp"]["day"].as<float>();
+    _weather.tomorrow.feels_like = doc["daily"][1]["feels_like"]["day"].as<float>();
+    _weather.tomorrow.icon = doc["daily"][1]["weather"][0]["main"].as<String>();
+    _weather.tomorrow.description = doc["daily"][1]["weather"][0]["description"].as<String>();
+    _weather.tomorrow.sunrise = doc["daily"][1]["weather"][0]["sunrise"].as<EPOCH>();
+    _weather.tomorrow.sunset = doc["daily"][1]["weather"][0]["sunset"].as<EPOCH>();
 }
 
 float OpenWeatherClient::getCurrentTemp() {
-    return _current.temp;
+    return _weather.current.temp;
 }
 
 String OpenWeatherClient::getCurrentDescription() {
-    return _current.description;
+    return _weather.current.description;
+}
+
+float OpenWeatherClient::getTomorrowTemp() {
+    return _weather.tomorrow.temp;
+}
+
+String OpenWeatherClient::getTomorrowDescription() {
+    return _weather.tomorrow.description;
 }
