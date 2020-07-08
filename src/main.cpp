@@ -6,6 +6,8 @@
 #include <GxIO/GxIO.h>
 #include <Fonts/FreeMono9pt7b.h>
 
+#include <TimeLib.h>
+
 #include "WiFiModule.h"
 #include "OpenWeatherClient.h"
 
@@ -61,13 +63,23 @@ unsigned long nextDisplayUpdate = 0;
 unsigned long gotoSleepAt = -1;
 
 void printTemp() {
+    auto current = weather.getCurrentData();
+    auto tomorrow = weather.getTomorrowData();
+
     display.setCursor(0, 24);
-    display.printf("%.1f°C  ", weather.getCurrentTemp());
-    display.println(weather.getCurrentDescription());
+    display.printf("%.1f°C  ", current.temp);
+    display.println(current.description);
 
     display.setCursor(0, 40);
-    display.printf("%.1f°C  ", weather.getTomorrowTemp());
-    display.println(weather.getTomorrowDescription());
+    display.printf("%.1f°C  ", tomorrow.temp);
+    display.println(tomorrow.description);
+
+    int offset = weather.getTimezoneOffset();
+    display.setCursor(0, 60);
+    display.printf("Sunrise %d:%2d", hour(current.sunrise + offset), minute(current.sunrise + offset));
+
+    display.setCursor(0, 74);
+    display.printf("Sunset %d:%2d", hour(current.sunset + offset), minute(current.sunset + offset));
 }
 
 void updateDisplay(const unsigned long t) {

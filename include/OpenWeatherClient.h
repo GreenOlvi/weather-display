@@ -2,6 +2,7 @@
 #define OPENWEATHERCLIENT_H
 
 #define EPOCH unsigned long
+#define PARSING_MEMORY 7500
 
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -31,10 +32,9 @@ class OpenWeatherClient : Updatable {
     public:
         OpenWeatherClient(float latitude, float longitude, const char* apiKey);
         void update(const unsigned long t) override;
-        float getCurrentTemp(void);
-        String getCurrentDescription(void);
-        float getTomorrowTemp(void);
-        String getTomorrowDescription(void);
+        WeatherData getCurrentData(void);
+        WeatherData getTomorrowData(void);
+        int getTimezoneOffset(void);
 
     private:
         float _latitude, _longitude;

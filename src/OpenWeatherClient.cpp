@@ -39,7 +39,7 @@ void OpenWeatherClient::fetchWeather() {
     payload.toCharArray(json, sizeof(json));
     json[payload.length() + 1] = '\0';
 
-    DynamicJsonDocument doc(30000);
+    DynamicJsonDocument doc(PARSING_MEMORY);
     DeserializationError error = deserializeJson(doc, json);
 
     if (error) {
@@ -57,29 +57,26 @@ void OpenWeatherClient::fetchWeather() {
     _weather.current.feels_like = doc["current"]["feels_like"].as<float>();
     _weather.current.icon = doc["current"]["weather"][0]["main"].as<String>();
     _weather.current.description = doc["current"]["weather"][0]["description"].as<String>();
-    _weather.current.sunrise = doc["current"]["weather"][0]["sunrise"].as<EPOCH>();
-    _weather.current.sunset = doc["current"]["weather"][0]["sunset"].as<EPOCH>();
+    _weather.current.sunrise = doc["current"]["sunrise"].as<EPOCH>();
+    _weather.current.sunset = doc["current"]["sunset"].as<EPOCH>();
 
     _weather.tomorrow.temp = doc["daily"][1]["temp"]["day"].as<float>();
     _weather.tomorrow.feels_like = doc["daily"][1]["feels_like"]["day"].as<float>();
     _weather.tomorrow.icon = doc["daily"][1]["weather"][0]["main"].as<String>();
     _weather.tomorrow.description = doc["daily"][1]["weather"][0]["description"].as<String>();
-    _weather.tomorrow.sunrise = doc["daily"][1]["weather"][0]["sunrise"].as<EPOCH>();
-    _weather.tomorrow.sunset = doc["daily"][1]["weather"][0]["sunset"].as<EPOCH>();
+    _weather.tomorrow.sunrise = doc["daily"][1]["sunrise"].as<EPOCH>();
+    _weather.tomorrow.sunset = doc["daily"][1]["sunset"].as<EPOCH>();
 }
 
-float OpenWeatherClient::getCurrentTemp() {
-    return _weather.current.temp;
+WeatherData OpenWeatherClient::getCurrentData() {
+    return _weather.current;
 }
 
-String OpenWeatherClient::getCurrentDescription() {
-    return _weather.current.description;
+WeatherData OpenWeatherClient::getTomorrowData() {
+    return _weather.tomorrow;
 }
 
-float OpenWeatherClient::getTomorrowTemp() {
-    return _weather.tomorrow.temp;
+int OpenWeatherClient::getTimezoneOffset() {
+    return _weather.timezone_offset;
 }
 
-String OpenWeatherClient::getTomorrowDescription() {
-    return _weather.tomorrow.description;
-}
