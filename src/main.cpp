@@ -16,6 +16,7 @@
 #define RST_PIN 16
 #define BUSY_PIN 4
 #define LED_PIN 19
+#define BAT_TEST_PIN 35
 
 GxIO_Class io(SPI, CS_PIN, DC_PIN, RST_PIN);
 GxEPD_Class display(io, RST_PIN, BUSY_PIN);
@@ -31,13 +32,18 @@ OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);
 #define TIME_TO_SLEEP  600      /* Time ESP32 will go to sleep (in seconds) */
 RTC_DATA_ATTR int bootCount = 0;
 
+RTC_DATA_ATTR WeatherData current;
+RTC_DATA_ATTR WeatherData tomorrow;
+
 void goToSleep() {
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-  esp_deep_sleep_start();
+    Serial.println("Going to sleep");
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    esp_deep_sleep_start();
 }
 
 void setup() {
     ++bootCount;
+    pinMode(BAT_TEST_PIN, INPUT);
 
     Serial.begin(115200);
     Serial.println("Boot number: " + String(bootCount));
@@ -59,44 +65,60 @@ bool on = false;
 bool connected = false;
 bool hasTemp = false;
 
+float battertyVoltage;
+
 unsigned long nextDisplayUpdate = 0;
 unsigned long gotoSleepAt = -1;
 
 void printTemp() {
-    auto current = weather.getCurrentData();
-    auto tomorrow = weather.getTomorrowData();
+    current = weather.getCurrentData();
+    tomorrow = weather.getTomorrowData();
 
-    display.setCursor(0, 24);
-    display.printf("%.1f°C  ", current.temp);
-    display.println(current.description);
+    if (current.dt > 0) {
+        display.setCursor(0, 24);
+        display.printf("%.1f°C  ", current.temp);
+        display.println(current.description);
 
-    display.setCursor(0, 40);
-    display.printf("%.1f°C  ", tomorrow.temp);
-    display.println(tomorrow.description);
+        display.setCursor(0, 40);
+        display.printf("%.1f°C  ", tomorrow.temp);
+        display.println(tomorrow.description);
 
-    int offset = weather.getTimezoneOffset();
-    display.setCursor(0, 60);
-    display.printf("Sunrise %d:%2d", hour(current.sunrise + offset), minute(current.sunrise + offset));
+        int offset = weather.getTimezoneOffset();
+        display.setCursor(0, 60);
+        display.printf("Sunrise %02d:%02d", hour(current.sunrise + offset), minute(current.sunrise + offset));
 
-    display.setCursor(0, 74);
-    display.printf("Sunset %d:%2d", hour(current.sunset + offset), minute(current.sunset + offset));
+        display.setCursor(0, 74);
+        display.printf("Sunset  %02d:%02d", hour(current.sunset + offset), minute(current.sunset + offset));
+
+        display.setCursor(0, 120);
+        display.printf("Last update %02d:%02d", hour(current.dt + offset), minute(current.dt + offset));
+    }
+}
+
+void printBattery() {
+    battertyVoltage = (float)(analogRead(BAT_TEST_PIN)) / 4095 * 2 * 3.3 * 1.1;
+    Serial.print("VBat = ");
+    Serial.printf("%.2f", battertyVoltage);
+    Serial.println("V");
+
+    display.setCursor(195, 10);
+    display.printf("%.2fV", battertyVoltage);
 }
 
 void updateDisplay(const unsigned long t) {
     if (t < nextDisplayUpdate) return;
 
-    printTemp();
-
     if (wifi.isConnected() && !connected) {
         display.setCursor(0, 10);
         display.print(WiFi.localIP().toString());
         connected = true;
-
-        gotoSleepAt = t + 5000;
     }
 
-    display.setCursor(0, 120);
-    display.printf("Boot count %d", bootCount);
+    printTemp();
+    printBattery();
+
+    // display.setCursor(0, 120);
+    // display.printf("Boot count %d", bootCount);
 
     display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 

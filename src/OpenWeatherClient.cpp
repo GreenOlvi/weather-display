@@ -53,6 +53,7 @@ void OpenWeatherClient::fetchWeather() {
     _weather.timezone = doc["timezone"].as<String>();
     _weather.timezone_offset = doc["timezone_offset"].as<EPOCH>();
 
+    _weather.current.dt = doc["current"]["dt"].as<EPOCH>();
     _weather.current.temp = doc["current"]["temp"].as<float>();
     _weather.current.feels_like = doc["current"]["feels_like"].as<float>();
     _weather.current.icon = doc["current"]["weather"][0]["main"].as<String>();
