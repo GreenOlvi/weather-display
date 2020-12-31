@@ -32,9 +32,6 @@ OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);
 #define TIME_TO_SLEEP  600      /* Time ESP32 will go to sleep (in seconds) */
 RTC_DATA_ATTR int bootCount = 0;
 
-RTC_DATA_ATTR WeatherData current;
-RTC_DATA_ATTR WeatherData tomorrow;
-
 void goToSleep() {
     Serial.println("Going to sleep");
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -61,18 +58,14 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
 }
 
-bool on = false;
-bool connected = false;
-bool hasTemp = false;
-
 float battertyVoltage;
 
 unsigned long nextDisplayUpdate = 0;
 unsigned long gotoSleepAt = -1;
 
 void printTemp() {
-    current = weather.getCurrentData();
-    tomorrow = weather.getTomorrowData();
+    auto current = weather.getCurrentData();
+    auto tomorrow = weather.getTomorrowData();
 
     if (current.dt > 0) {
         display.setCursor(0, 24);
@@ -92,6 +85,8 @@ void printTemp() {
 
         display.setCursor(0, 120);
         display.printf("Last update %02d:%02d", hour(current.dt + offset), minute(current.dt + offset));
+
+        gotoSleepAt = millis(); // can go to sleep now
     }
 }
 
@@ -105,14 +100,17 @@ void printBattery() {
     display.printf("%.2fV", battertyVoltage);
 }
 
+void clearDisplay() {
+    display.fillRect(0, 0, GxEPD_HEIGHT, GxEPD_WIDTH, GxEPD_WHITE);
+}
+
 void updateDisplay(const unsigned long t) {
     if (t < nextDisplayUpdate) return;
 
-    if (wifi.isConnected() && !connected) {
-        display.setCursor(0, 10);
-        display.print(WiFi.localIP().toString());
-        connected = true;
-    }
+    clearDisplay();
+
+    display.setCursor(0, 10);
+    display.print(WiFi.localIP().toString());
 
     printTemp();
     printBattery();
@@ -132,7 +130,7 @@ void loop() {
     weather.update(t);
     updateDisplay(t);
 
-    if (t <= gotoSleepAt) {
+    if (t >= gotoSleepAt) {
         goToSleep();
     }
 }

@@ -6,7 +6,7 @@ OpenWeatherClient::OpenWeatherClient(float latitude, float longitude, const char
 }
 
 void OpenWeatherClient::update(const unsigned long t) {
-    if (_weather.updated == 0) {
+    if (WiFi.isConnected() && _weather.updated == 0) {
         fetchWeather();
     }
 }
@@ -81,3 +81,6 @@ int OpenWeatherClient::getTimezoneOffset() {
     return _weather.timezone_offset;
 }
 
+bool OpenWeatherClient::isUpToDate() {
+    return _weather.updated > 0;
+}

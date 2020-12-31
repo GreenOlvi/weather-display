@@ -35,6 +35,7 @@ class OpenWeatherClient : Updatable {
         WeatherData getCurrentData(void);
         WeatherData getTomorrowData(void);
         int getTimezoneOffset(void);
+        bool isUpToDate();
 
     private:
         float _latitude, _longitude;
