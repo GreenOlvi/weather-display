@@ -36,10 +36,13 @@ class OpenWeatherClient : Updatable {
         WeatherData getTomorrowData(void);
         int getTimezoneOffset(void);
         bool isUpToDate();
+        int getApiQueryCount();
+        void resetApiQueryCount();
 
     private:
         float _latitude, _longitude;
         const char* _apiKey;
+        int _apiQueryCount = 0;
 
         String buildUri(void);
         void fetchWeather(void);

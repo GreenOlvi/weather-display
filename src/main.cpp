@@ -5,11 +5,11 @@
 #include <GxIO/GxIO_SPI/GxIO_SPI.h>
 #include <GxIO/GxIO.h>
 #include <Fonts/FreeMono9pt7b.h>
-
-#include <TimeLib.h>
+#include <ESPmDNS.h>
 
 #include "WiFiModule.h"
 #include "OpenWeatherClient.h"
+#include "Mqtt.h"
 
 #define CS_PIN SS
 #define DC_PIN 17
@@ -28,9 +28,12 @@ WiFiModule wifi(wifiSsid, wifiPassword);
 const char weatherApiKey[] = OPEN_WEATHER_MAP_API_KEY;
 OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);
 
+MqttClient mqtt("weatherDisplay", MQTT_HOST, MQTT_PORT);
+
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  600      /* Time ESP32 will go to sleep (in seconds) */
 RTC_DATA_ATTR int bootCount = 0;
+RTC_DATA_ATTR int unreportedQueryCount = 0;
 
 void goToSleep() {
     Serial.println("Going to sleep");
@@ -39,13 +42,17 @@ void goToSleep() {
 }
 
 void setup() {
-    ++bootCount;
     pinMode(BAT_TEST_PIN, INPUT);
+    bootCount++;
 
     Serial.begin(115200);
     Serial.println("Boot number: " + String(bootCount));
 
     wifi.setup();
+    if (!MDNS.begin("weatherDisplay")) {
+        Serial.println("MDNS.begin failed");
+    }
+    mqtt.setup();
 
     display.init();
     display.eraseDisplay();
@@ -85,8 +92,6 @@ void printTemp() {
 
         display.setCursor(0, 120);
         display.printf("Last update %02d:%02d", hour(current.dt + offset), minute(current.dt + offset));
-
-        gotoSleepAt = millis(); // can go to sleep now
     }
 }
 
@@ -115,22 +120,46 @@ void updateDisplay(const unsigned long t) {
     printTemp();
     printBattery();
 
-    // display.setCursor(0, 120);
-    // display.printf("Boot count %d", bootCount);
-
     display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 
     nextDisplayUpdate = t + 1000;
 }
 
+unsigned long nextReport = 0;
+
+void reportData(const unsigned long t) {
+    if (t < nextReport || !WiFi.isConnected() || !mqtt.isConnected() || !weather.isUpToDate()) return;
+
+    auto current = weather.getCurrentData();
+    float battertyVoltage = (float)(analogRead(BAT_TEST_PIN)) / 4095 * 2 * 3.3 * 1.1;
+
+    mqtt.publish("env/weatherDisplay/temp_out", current.temp);
+
+    char payload[10];
+    sprintf(payload, "%.2f", battertyVoltage);
+    mqtt.publish("tele/weatherDisplay/batteryVoltage", payload);
+
+    int queries = unreportedQueryCount + weather.getApiQueryCount();
+    if (mqtt.publish("tele/weatherDisplay/owApiQueries", String(queries).c_str())) {
+        unreportedQueryCount = 0;
+        weather.resetApiQueryCount();
+    } else {
+        unreportedQueryCount = queries;
+    }
+
+    nextReport = t + 1000 * 60; // 1 minute
+
+    gotoSleepAt = millis() + 1000; // can go to sleep now
+}
+
 void loop() {
-    unsigned long t = millis();
+    wifi.update(millis());
+    weather.update(millis());
+    mqtt.update(millis());
+    updateDisplay(millis());
+    reportData(millis());
 
-    wifi.update(t);
-    weather.update(t);
-    updateDisplay(t);
-
-    if (t >= gotoSleepAt) {
+    if (millis() >= gotoSleepAt) {
         goToSleep();
     }
 }

@@ -20,10 +20,12 @@ String OpenWeatherClient::buildUri() {
 }
 
 void OpenWeatherClient::fetchWeather() {
+    //TODO cache response to spifs
     String url = buildUri();
 
     HTTPClient client;
     client.begin(url);
+    _apiQueryCount++;
 
     int code = client.GET();
     if (code == 0) {
@@ -82,5 +84,13 @@ int OpenWeatherClient::getTimezoneOffset() {
 }
 
 bool OpenWeatherClient::isUpToDate() {
-    return _weather.updated > 0;
+    return _weather.updated != 0;
+}
+
+int OpenWeatherClient::getApiQueryCount() {
+    return _apiQueryCount;
+}
+
+void OpenWeatherClient::resetApiQueryCount() {
+    _apiQueryCount = 0;
 }
