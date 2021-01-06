@@ -11,6 +11,8 @@
 #include "OpenWeatherClient.h"
 #include "Mqtt.h"
 
+#define SERIAL_DEBUG
+
 #define CS_PIN SS
 #define DC_PIN 17
 #define RST_PIN 16
@@ -31,13 +33,16 @@ OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);
 MqttClient mqtt("weatherDisplay", MQTT_HOST, MQTT_PORT);
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  600      /* Time ESP32 will go to sleep (in seconds) */
+unsigned long TimeToSleep = 600; /* Time ESP32 will go to sleep (in seconds) */
+
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR int unreportedQueryCount = 0;
 
 void goToSleep() {
-    Serial.println("Going to sleep");
-    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    #ifdef SERIAL_DEBUG
+    Serial.printf("Going to sleep for %lu seconds\n", TimeToSleep);
+    #endif
+    esp_sleep_enable_timer_wakeup(TimeToSleep * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
 }
 
@@ -45,12 +50,16 @@ void setup() {
     pinMode(BAT_TEST_PIN, INPUT);
     bootCount++;
 
+    #ifdef SERIAL_DEBUG
     Serial.begin(115200);
     Serial.println("Boot number: " + String(bootCount));
+    #endif
 
     wifi.setup();
     if (!MDNS.begin("weatherDisplay")) {
+        #ifdef SERIAL_DEBUG
         Serial.println("MDNS.begin failed");
+        #endif
     }
     mqtt.setup();
 
@@ -59,8 +68,6 @@ void setup() {
     display.setRotation(1);
     display.setFont(&FreeMono9pt7b);
     display.setTextColor(GxEPD_BLACK);
-    // display.update();
-    // display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 
     pinMode(LED_PIN, OUTPUT);
 }
@@ -74,8 +81,8 @@ void printTemp() {
     auto current = weather.getCurrentData();
     auto tomorrow = weather.getTomorrowData();
 
+    display.setCursor(0, 24);
     if (current.dt > 0) {
-        display.setCursor(0, 24);
         display.printf("%.1f°C  ", current.temp);
         display.println(current.description);
 
@@ -92,14 +99,18 @@ void printTemp() {
 
         display.setCursor(0, 120);
         display.printf("Last update %02d:%02d", hour(current.dt + offset), minute(current.dt + offset));
+    } else {
+        display.printf("Failed to fetch data");
     }
 }
 
 void printBattery() {
     battertyVoltage = (float)(analogRead(BAT_TEST_PIN)) / 4095 * 2 * 3.3 * 1.1;
+#ifdef SERIAL_DEBUG
     Serial.print("VBat = ");
     Serial.printf("%.2f", battertyVoltage);
     Serial.println("V");
+#endif
 
     display.setCursor(195, 10);
     display.printf("%.2fV", battertyVoltage);
@@ -122,18 +133,23 @@ void updateDisplay(const unsigned long t) {
 
     display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 
-    nextDisplayUpdate = t + 1000;
+    nextDisplayUpdate = millis() + 5000;
 }
 
 unsigned long nextReport = 0;
 
 void reportData(const unsigned long t) {
-    if (t < nextReport || !WiFi.isConnected() || !mqtt.isConnected() || !weather.isUpToDate()) return;
+    if (t < nextReport || !WiFi.isConnected() || !mqtt.isConnected() || !weather.madeFetchAttempt()) return;
 
-    auto current = weather.getCurrentData();
+    if (weather.isUpToDate()) {
+        auto current = weather.getCurrentData();
+        mqtt.publish("env/weatherDisplay/temp_out", current.temp);
+    } else {
+        // retry in a minute
+        TimeToSleep = 60;
+    }
+
     float battertyVoltage = (float)(analogRead(BAT_TEST_PIN)) / 4095 * 2 * 3.3 * 1.1;
-
-    mqtt.publish("env/weatherDisplay/temp_out", current.temp);
 
     char payload[10];
     sprintf(payload, "%.2f", battertyVoltage);

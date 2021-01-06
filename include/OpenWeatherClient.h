@@ -9,6 +9,7 @@
 #include "Updatable.h"
 
 const char _weatherUri[] = "https://api.openweathermap.org/data/2.5/onecall?lat={lat}&lon={lon}&appid={apiKey}&exclude=hourly&units=metric";
+#define RetryOnFailDelay 60000
 
 struct WeatherData {
     EPOCH dt;
@@ -38,14 +39,17 @@ class OpenWeatherClient : Updatable {
         bool isUpToDate();
         int getApiQueryCount();
         void resetApiQueryCount();
+        bool madeFetchAttempt();
 
     private:
         float _latitude, _longitude;
         const char* _apiKey;
         int _apiQueryCount = 0;
+        EPOCH _nextRetry = 0;
+        bool _madeFetchAttempt = false;
 
         String buildUri(void);
-        void fetchWeather(void);
+        bool fetchWeather(void);
         WeatherResult _weather;
 };
 
