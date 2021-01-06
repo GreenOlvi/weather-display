@@ -1,9 +1,11 @@
 #include <Arduino.h>
 
-#include <GxEPD.h>
-#include <GxGDEH0213B72/GxGDEH0213B72.h>
-#include <GxIO/GxIO_SPI/GxIO_SPI.h>
-#include <GxIO/GxIO.h>
+#define ENABLE_GxEPD2_GFX 0
+
+#include <GxEPD2_BW.h>
+#include <GxEPD2_3C.h>
+#include <GxEPD2_7C.h>
+
 #include <Fonts/FreeMono9pt7b.h>
 
 #undef SERIAL_DEBUG
@@ -20,8 +22,7 @@
 #define LED_PIN 19
 #define BAT_TEST_PIN 35
 
-GxIO_Class io(SPI, CS_PIN, DC_PIN, RST_PIN);
-GxEPD_Class display(io, RST_PIN, BUSY_PIN);
+GxEPD2_BW<GxEPD2_213_B72, GxEPD2_213_B72::HEIGHT> display(GxEPD2_213_B72(CS_PIN, DC_PIN, RST_PIN, BUSY_PIN));
 
 WiFiModule wifi(HOSTNAME, STASSID, STAPSK);
 MqttModule mqtt(&wifi, "weatherDisplay", MQTT_HOST, MQTT_PORT);
@@ -34,6 +35,14 @@ unsigned long TimeToSleep = 600; /* Time ESP32 will go to sleep (in seconds) */
 
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR int unreportedQueryCount = 0;
+
+float battertyVoltage;
+
+unsigned long nextDisplayUpdate = -1;
+unsigned long gotoSleepAt = -1;
+
+bool displayedResults = false;
+bool reportedResults = false;
 
 void goToSleep() {
     #ifdef SERIAL_DEBUG
@@ -59,38 +68,35 @@ void setup() {
     mqtt.setup();
     mqtt.connect();
 
-    display.init();
-    display.eraseDisplay();
+    wifi.onConnect([](WiFiClass *wifi) { nextDisplayUpdate = millis() + 100; });
+
+    display.init(115200);
     display.setRotation(1);
     display.setFont(&FreeMono9pt7b);
     display.setTextColor(GxEPD_BLACK);
+    display.setFullWindow();
 
     pinMode(LED_PIN, OUTPUT);
 }
-
-float battertyVoltage;
-
-unsigned long nextDisplayUpdate = 0;
-unsigned long gotoSleepAt = -1;
 
 void printTemp() {
     auto current = weather.getCurrentData();
     auto tomorrow = weather.getTomorrowData();
 
-    display.setCursor(0, 24);
+    display.setCursor(0, 40);
     if (current.dt > 0) {
         display.printf("%.1f°C  ", current.temp);
         display.println(current.description);
 
-        display.setCursor(0, 40);
+        display.setCursor(0, 60);
         display.printf("%.1f°C  ", tomorrow.temp);
         display.println(tomorrow.description);
 
         int offset = weather.getTimezoneOffset();
-        display.setCursor(0, 60);
+        display.setCursor(0, 80);
         display.printf("Sunrise %02d:%02d", hour(current.sunrise + offset), minute(current.sunrise + offset));
 
-        display.setCursor(0, 74);
+        display.setCursor(0, 100);
         display.printf("Sunset  %02d:%02d", hour(current.sunset + offset), minute(current.sunset + offset));
 
         display.setCursor(0, 120);
@@ -108,28 +114,26 @@ void printBattery() {
     Serial.println("V");
 #endif
 
-    display.setCursor(195, 10);
+    display.setCursor(195, 20);
     display.printf("%.2fV", battertyVoltage);
 }
 
-void clearDisplay() {
-    display.fillRect(0, 0, GxEPD_HEIGHT, GxEPD_WIDTH, GxEPD_WHITE);
-}
-
 void updateDisplay(const unsigned long t) {
-    if (t < nextDisplayUpdate) return;
+    if (t < nextDisplayUpdate || !weather.madeFetchAttempt()) return;
 
-    clearDisplay();
+    auto ip = WiFi.localIP().toString().c_str();
 
-    display.setCursor(0, 10);
-    display.print(WiFi.localIP().toString());
+    display.fillScreen(GxEPD_WHITE);
+    display.setCursor(0, 20);
+    display.print(ip);
 
     printTemp();
     printBattery();
 
-    display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+    display.display(true);
 
-    nextDisplayUpdate = millis() + 5000;
+    nextDisplayUpdate = 1000;
+    displayedResults = true;
 }
 
 unsigned long nextReport = 0;
@@ -143,7 +147,7 @@ void reportData(const unsigned long t) {
         sprintf(payload, "%.1f", current.temp);
         mqtt.publish("env/weatherDisplay/temp_out", payload);
     } else {
-        // retry in a minute
+        // might as well go to sleep
         TimeToSleep = 60;
     }
 
@@ -162,8 +166,7 @@ void reportData(const unsigned long t) {
     }
 
     nextReport = t + 1000 * 60; // 1 minute
-
-    gotoSleepAt = millis() + 1000; // can go to sleep now
+    reportedResults = true;
 }
 
 void loop() {
@@ -172,6 +175,10 @@ void loop() {
     mqtt.update(millis());
     updateDisplay(millis());
     reportData(millis());
+
+    if (gotoSleepAt == -1 && displayedResults && reportedResults) {
+        gotoSleepAt = millis() + 100;
+    }
 
     if (millis() >= gotoSleepAt) {
         goToSleep();
