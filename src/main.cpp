@@ -5,13 +5,13 @@
 #include <GxIO/GxIO_SPI/GxIO_SPI.h>
 #include <GxIO/GxIO.h>
 #include <Fonts/FreeMono9pt7b.h>
-#include <ESPmDNS.h>
 
+#undef SERIAL_DEBUG
+
+#include "secrets.h"
 #include "WiFiModule.h"
 #include "OpenWeatherClient.h"
-#include "Mqtt.h"
-
-#define SERIAL_DEBUG
+#include "MqttModule.h"
 
 #define CS_PIN SS
 #define DC_PIN 17
@@ -23,14 +23,11 @@
 GxIO_Class io(SPI, CS_PIN, DC_PIN, RST_PIN);
 GxEPD_Class display(io, RST_PIN, BUSY_PIN);
 
-const char wifiSsid[] = STASSID;
-const char wifiPassword[] = STAPSK;
-WiFiModule wifi(wifiSsid, wifiPassword);
+WiFiModule wifi(HOSTNAME, STASSID, STAPSK);
+MqttModule mqtt(&wifi, "weatherDisplay", MQTT_HOST, MQTT_PORT);
 
 const char weatherApiKey[] = OPEN_WEATHER_MAP_API_KEY;
 OpenWeatherClient weather(LATITUDE, LONGITUDE, weatherApiKey);
-
-MqttClient mqtt("weatherDisplay", MQTT_HOST, MQTT_PORT);
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 unsigned long TimeToSleep = 600; /* Time ESP32 will go to sleep (in seconds) */
@@ -41,6 +38,7 @@ RTC_DATA_ATTR int unreportedQueryCount = 0;
 void goToSleep() {
     #ifdef SERIAL_DEBUG
     Serial.printf("Going to sleep for %lu seconds\n", TimeToSleep);
+    Serial.printf("Millis = %lu", millis());
     #endif
     esp_sleep_enable_timer_wakeup(TimeToSleep * uS_TO_S_FACTOR);
     esp_deep_sleep_start();
@@ -56,12 +54,10 @@ void setup() {
     #endif
 
     wifi.setup();
-    if (!MDNS.begin("weatherDisplay")) {
-        #ifdef SERIAL_DEBUG
-        Serial.println("MDNS.begin failed");
-        #endif
-    }
+    wifi.connect();
+
     mqtt.setup();
+    mqtt.connect();
 
     display.init();
     display.eraseDisplay();
@@ -143,7 +139,9 @@ void reportData(const unsigned long t) {
 
     if (weather.isUpToDate()) {
         auto current = weather.getCurrentData();
-        mqtt.publish("env/weatherDisplay/temp_out", current.temp);
+        char payload[6];
+        sprintf(payload, "%.1f", current.temp);
+        mqtt.publish("env/weatherDisplay/temp_out", payload);
     } else {
         // retry in a minute
         TimeToSleep = 60;
