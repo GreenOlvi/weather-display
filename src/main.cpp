@@ -35,6 +35,7 @@ unsigned long TimeToSleep = 600; /* Time ESP32 will go to sleep (in seconds) */
 
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR int unreportedQueryCount = 0;
+RTC_DATA_ATTR int failedQueries = 0;
 
 float battertyVoltage;
 
@@ -142,13 +143,15 @@ void reportData(const unsigned long t) {
     if (t < nextReport || !WiFi.isConnected() || !mqtt.isConnected() || !weather.madeFetchAttempt()) return;
 
     if (weather.isUpToDate()) {
+        failedQueries = 0;
         auto current = weather.getCurrentData();
         char payload[6];
         sprintf(payload, "%.1f", current.temp);
         mqtt.publish("env/weatherDisplay/temp_out", payload);
     } else {
         // might as well go to sleep
-        TimeToSleep = 60;
+        TimeToSleep = pow(2, failedQueries) * 60;
+        failedQueries++;
     }
 
     float battertyVoltage = (float)(analogRead(BAT_TEST_PIN)) / 4095 * 2 * 3.3 * 1.1;
